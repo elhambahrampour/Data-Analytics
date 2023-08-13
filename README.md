@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 
 # Data Analytics of NAHNES data
 
@@ -12,11 +11,11 @@ Do we need to tailor the physical activity recommendations to the individual’s
 
 ##  Goal
 
-To explore if this fact is true: "everyone should engage in moderate or vigorous intensity sports, fitness, or recreational activities regardless of his economic status".
+To explore if this fact is true: "Everyone should engage in moderate or vigorous intensity sports, fitness, or recreational activities regardless of his economic status".
 
 ##  Method
 
-We fitted a tailored model to data, considering the relevant variables such as, BMI, physical activity, wealth status, educational level, age, and diabetes to find the optimal recommendation to physical activity. We used the weighted ordinary least squares regression model using inverse probability weights.
+We fitted a tailored model to the data, considering the relevant variables such as BMI, physical activity, wealth status, educational level, age, and diabetes to find the optimal recommendation for physical activity. We used the weighted ordinary least squares regression model using inverse probability weights.
 
 ## Results
 
