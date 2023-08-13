@@ -1,0 +1,184 @@
+---
+title: "Data Analysis and Data Analytics of NHANES"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    fig_caption: yes
+    theme: cerulean
+    self_contained: true
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(dplyr)
+library(tidyr) 
+library(tidyverse)
+library(ggplot2)
+library(ggcorrplot)
+library(knitr)
+library(kableExtra)
+library(tableone)
+```
+
+Maintaining a healthy body mass index (BMI) is widely recognized as beneficial for overall human health. Various factors have been shown to affect an individual’s BMI, including physical activity, dietary habits, and genetics. Studies have shown that socioeconomic factors such as educational level and economic status are also associated (not necessarily causally) with BMI. In this project, we examine the causal impact of physical activity on BMI. It is crucial to consider the influence of educational level and wealth status, as these may act as important confounders that can introduce bias if adjustment is inadequate or not possible. 
+
+## NHANES data
+
+In this project, we use the United States’ National Health and Nutrition Examination Survey (NHANES) program. NHANES assesses the health and nutritional well-being of individuals, both children and adults, residing in the United States. This survey was conducted by the National Center for Health Statistics (NCHS) within the Centers for Disease Control and Prevention (CDC) by collecting data through interviews and physical examinations. 
+
+We recode some variables, that are either "Yes" or "No", as 1 and 0 for convenience of the analysis. Depression, Marriage, smoking, physical activity, alcoholic, diabetes status are such these variables. The wealth status is determined as a ratio of family income to wealth guidelines, where smaller numbers indicate greater poverty. The educational level is recorded as 8th grade, 9th − 11th grade, high school, some college, or college graduate.
+
+Out of all participants, we exclude the individuals classified as underweight (BMI< 18.5) as well as the children (individuals under age 20 years). We also focus on the following four group of BMI. 
+
+```{r, echo=FALSE}
+
+df <- data.frame(Cat = c("Underweight", "Normal weight", "Overweight ", "Obesity "), 
+                 BMI = linebreak(c("<=18.5", "18.6-24.9", "25-29.9", ">=30")))
+kable(df, col.names = c("Classification", "BMI"), escape = F, caption = "Common BMI classification system") %>%
+  kable_styling(latex_options = "hold_position", full_width = F)
+```
+
+
+```{r, include=FALSE}
+library(NHANES)
+
+data<-data.frame(NHANES$ID, NHANES$Gender,NHANES$Age, NHANES$Education,
+                 NHANES$Depressed, NHANES$Race1,NHANES$Poverty, NHANES$MaritalStatus,
+                 NHANES$Smoke100n,NHANES$HHIncomeMid,NHANES$BMI, NHANES$SurveyYr,
+                 NHANES$PhysActive, NHANES$BPSysAve, NHANES$HealthGen, NHANES$Diabetes, NHANES$Alcohol12PlusYr )
+
+data$sex <- ifelse(NHANES$Gender=='female', 1, 0)
+data$educationLevel <- ifelse(NHANES$Education=='8th Grade', 8, 
+                              ifelse(NHANES$Education=='9 - 11th Grade', 10, 
+                                     ifelse(NHANES$Education=='High School', 12, 
+                                            ifelse(NHANES$Education=='Some College', 14, 16))))
+data$depressionLevel <- ifelse(NHANES$Depressed=='None', 0, 1)
+data$married <- ifelse(NHANES$MaritalStatus=='Married ', 1,0)
+data$smoker <- ifelse(NHANES$Smoke100n=='Smoker', 1, 0)
+data$cycle <- ifelse(NHANES$SurveyYr=='2009_10', 1, 2)
+data$active <- ifelse(NHANES$PhysActive=='Yes', 1, 0)
+data$health <- ifelse(NHANES$HealthGen=='Excellent', 3, 
+                      ifelse(NHANES$HealthGen=='Vgood', 3, 
+                             ifelse(NHANES$HealthGen=='Good', 2, 
+                                    ifelse(NHANES$HealthGen=='Fair', 1,
+                                           ifelse(NHANES$HealthGen=='Poor', 1, 0 )))))
+data$diabetLevel <- ifelse(NHANES$Diabetes=='Yes', 1, 0)
+data$alcoholLevel <- ifelse(NHANES$Alcohol12PlusYr=='Yes', 1, 0)
+data$white <- ifelse(NHANES$Race1=='White', 1, 0)
+data$cat <- ifelse(NHANES$BMI<18.6, 'Under weight', 
+                      ifelse(NHANES$BMI<25, 'Normal weight',
+                             ifelse(NHANES$BMI<30, 'Over weight', 'Obesity')))
+colnames(data)<-c('id','gender','age', 'education',
+                  'depressed', 'race','poverty', 'marital',
+                  'smoking','income', 'bmi', 'year',
+                  'physactive', 'bp', 'health general', 'diabet', 'alcohol',
+                  'sex', 'education_level', 'depression_level', 'marital_level',
+                  'smoker', 'cycle', 'active', 'health', 'diabet_level', 
+                  'alcohol_level', 'white', 'cat')
+data <- data[complete.cases(data), ]
+
+vars1 <- c("cycle", "active", "bmi", "education",
+           "poverty", "age", "diabet_level")
+cc.Table2 <- CreateTableOne(vars = vars1, strata = c("cycle","active"), data = data, test = FALSE)
+q <- print(cc.Table2 , smd = FALSE)
+kable(q, format = "latex")
+```
+
+## Data Analysis
+Following table presents the summary statistics for the variables for the two subgroups defined by the physical activity variable in 2009 − 2010 (cycle 1) and 2011 − 2012 (cycle 2).
+For continuous variables, the mean and standard deviation (SD) are provided. The categorical variables are represented by the percentage for each category. Note that missing data are excluded from the dataset.
+
+```{r, echo=FALSE}
+
+df <- data.frame(Cat = c("Physical Activity", "BMI (mean (SD)", "Education (%)", 
+                                      "8th Grade", "9 - 11th Grade ", "High School", "Some College", "College Grad", 
+                                      "Wealth Level (mean (SD))", "Age (mean (SD))", "Diabet Level (mean (SD)))"), 
+                 
+                 cycle10 = linebreak(c("No (N=1350)", "30.33 (7.49)", "", 
+                                      "107 ( 7.9)", "244 (18.1)", "408 (30.2)", "405 (30.0)", "186 (13.8)", 
+                                      "2.65 (1.56)", "49.84 (17.38)", "0.14 (0.35)")),
+                 
+                 cycle20 = linebreak(c("No (N=1297)", "29.83 (6.67)", "", 
+                                      "97 ( 7.5)", "211 (16.3)", "303 (23.4)", "446 (34.4)", "240 (18.5)", 
+                                      "2.62 (1.61)", "51.39 (16.54)", "0.15 (0.35)")),
+                 
+                 cycle11 = linebreak(c("No (N=1527)", "27.94 (6.10)", "", 
+                                      "44 ( 2.9)", "122 ( 8.0)", "263 (17.2)", "488 (32.0)", "610 (39.9)", 
+                                      "3.42 (1.61)", "44.71 (15.75)", "0.07 (0.26)")),
+                 
+                 cycle21 = linebreak(c("No (N=1621)", "28.00 (6.03)", "", 
+                                      "28 ( 1.7)", "98 ( 6.0)", "261 (16.1)", "504 (31.1)", "730 (45.0)", 
+                                      "3.25 (1.63)", "44.51 (16.49)", "0.07 (0.26)"))
+                 )
+kable(df, col.names = c("Variable", "2009-2010", "2010-2011", "2009-2010", "2010-2011"), escape = F, caption = "Summary of NHANES for each category of physical activity, excluding missing data") %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+The following scatter plot demonstrates that the wealth status is affecting the BMI and this relationship is also influenced by individual's educational level. We can explain this observation as the physical activity requirements may be greater for lower income individuals to compensate for structural and environmental inequities such living in a food desert (low access to high quality nutrition) or being in a less walkable neighborhood.
+There is another aspect to this subject that the lower wealth levels have been linked to higher BMI due to limited access to healthy food options and reliance on high-calorie processed foods. Additionally, educational level has been found to affect BMI, potentially due to greater knowledge about healthy eating and regular exercise or through mechanisms such as higher education increasing income, which in turn is associated with lower BMI in developed nations.
+
+```{r, echo=FALSE}
+data <- data[data$age>=20,]
+data <- data[data$bmi>=18.5,]
+
+gg <- ggplot(data) + 
+  geom_point(aes(x=poverty, y=bmi, color=physactive)) +
+  labs(title="Scatterplot", x="Wealth Status", y="BMI") + 
+  theme(plot.title=element_text(size=15, face="bold"), 
+                  axis.text.x=element_text(size=10), 
+                  axis.text.y=element_text(size=10),
+                  axis.title.x=element_text(size=12),
+                  axis.title.y=element_text(size=12)) + 
+  scale_color_discrete(name="Physically Active") +
+  facet_grid( ~factor(education, levels=c('8th Grade', '9 - 11th Grade', 'High School', 'Some College', 'College Grad')))
+
+print(gg)
+```
+
+We also explore the relationship between variables educational Level and the Wealth status by a jitter plot. As one can say, there seems to be a approximately linear relationship between Education level and Wealth Status for two category of physical activity variable. 
+
+```{r, echo=FALSE}
+ggplot(data) + 
+  geom_jitter(aes(x=poverty, y=education, color=physactive)) +
+  labs(title="Jitterplot", x="Wealth Status", y="Education Level") + 
+  theme(plot.title=element_text(size=15, face="bold"), 
+                  axis.text.x=element_text(size=10), 
+                  axis.text.y=element_text(size=10),
+                  axis.title.x=element_text(size=12),
+                  axis.title.y=element_text(size=12)) + 
+  scale_color_discrete(name="Physically Active") +
+  scale_y_discrete(limits = c('8th Grade', '9 - 11th Grade', 'High School', 'Some College', 'College Grad')) 
+
+C <- data$education_level
+X <- data$poverty
+Y <- data$bmi
+A <- data$active
+diabet <- data$diabet_level
+age <- data$age
+```
+
+
+## Data Analytics
+
+Motivation question is whether physical activity recommendations should be tailored to the individual’s wealth level. 
+We focus on several specific variables of the NHANES data relevant to our motivating question: BMI (Y), physical activity (A), wealth status (X), educational level (C), age, and diabetes. The outcome of interest in our analysis is BMI. In our project, the objective is to determine the optimal recommendation for physical activity and to investigate whether physical activity recommendations should be tailored to the individual’s wealth level. 
+
+We considered the tailored model as follows and obtain the estimators $\psi_0$ and $\psi_1$ by fitting a weighted ordinary least squares using inverse probability weights which is specified as $w=\frac{1}{P(A=1|X=x)},$
+$$E[Y|X,A,C;\psi,\beta] = \beta_0+\beta_1\mathrm{age}+\beta_2\mathrm{diabetes}+\beta_xX+\beta_cC+A(\psi_0+\psi_1X).$$
+```{r}
+treat <- A~X+C+age+diabet
+alpha <- glm(treat,binomial)
+A <- model.response(model.frame(treat,data))
+w <- ifelse(A<1, 1/(1-fitted(alpha)), 1/fitted(alpha))
+mod <- lm(-Y ~ age+diabet+X+C+A+A:X, data = data, weights=w) 
+paste0("The dWOLS estimators psi0 and psi1 are ", round(mod$coef[6],2), " and ", round(mod$coef[7],2), ", respectively.")
+```
+
+In the fitted model, the optimal recommendation is to recommend physical activity if $\hat{\psi}_0+\hat{\psi}_1X_1>0$. Equivalently, we can see that this means that physical activity is recommended if $X_1>\frac{-\hat{\psi}_0}{\hat{\psi}_1}$, assuming $\hat{\psi}_1$ is positive (the recommendation for physical activity is otherwise given if $X_1<\frac{-\hat{\psi}_0}{\hat{\psi}_1}$). The results in this section indicate that “everyone should engage in moderate or vigorous intensity sports, fitness, or recreational activities”, since the corresponding threshold is negative (−10.9), and the tailoring variable wealth is strictly positive hence always greater than these threshold. The estimated optimal recommendation aligns with current recommendations on the benefits of physical activity for adults. Thus, there is no apparent benefit to tailoring the recommendations based on wealth status.
